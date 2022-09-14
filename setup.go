@@ -1,12 +1,13 @@
 package coredns_nftables
 
 import (
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
-
 	"github.com/google/nftables"
 )
 
@@ -25,6 +26,8 @@ func setup(c *caddy.Controller) error {
 		handle.Next = next
 		return &handle
 	})
+
+	log.Debug("Add nftables plugin to dnsserver")
 
 	return nil
 }
@@ -70,21 +73,44 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 				setRuleTarget := strings.ToLower(args[1])
 				setRuleTableName := args[2]
 				setRuleSetName := args[3]
+				var setRuleIsInterval bool = false
+				var setRuleTimeout time.Duration = 0 // time.ParseDuration()
 				if setRuleAction != "add" || setRuleTarget != "element" {
 					return c.ArgErr()
 				}
+				var nextArgIndex int = 4
+				if len(args) > nextArgIndex {
+					tryInterval := strings.ToLower(args[nextArgIndex])
+					if parseBool, err := strconv.ParseBool(tryInterval); err == nil {
+						setRuleIsInterval = parseBool
+						nextArgIndex += 1
+					}
+				}
 
-				rule := NftablesSetAddElement{TableName: setRuleTableName, SetName: setRuleSetName}
+				if len(args) > nextArgIndex {
+					if parseTimeout, err := time.ParseDuration(args[nextArgIndex]); err == nil {
+						setRuleTimeout = parseTimeout
+						nextArgIndex += 1
+					}
+				}
+
+				for i := nextArgIndex; i < len(args); i++ {
+					log.Warningf("Ignore invalid setting %s", args[i])
+				}
+
+				rule := NftablesSetAddElement{TableName: setRuleTableName, SetName: setRuleSetName, Interval: setRuleIsInterval, Timeout: setRuleTimeout}
 
 				for _, family := range families {
 					ruleSet := handle.MutableRuleSet(family)
-					ruleSet.Rule = append(ruleSet.Rule, &rule)
+					ruleSet.RuleAddElement = append(ruleSet.RuleAddElement, &rule)
 				}
 
 			default:
 				return c.ArgErr()
 			}
 		}
+
+		log.Debug("Successfully parsed configuration")
 	}
 
 	return nil

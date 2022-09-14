@@ -2,16 +2,22 @@ package coredns_nftables
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/plugin/metrics"
+	clog "github.com/coredns/coredns/plugin/pkg/log"
 
 	"github.com/miekg/dns"
 
 	"github.com/google/nftables"
 )
 
+var log = clog.NewWithPlugin("nftables")
+
 type NftablesRuleSet struct {
-	Rule []plugin.Handler
+	RuleAddElement []*NftablesSetAddElement
 }
 
 // NftablesHandler implements the plugin.Handler interface.
@@ -29,10 +35,36 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		return rcode, err
 	}
 
-	ret, ok := m.Rules[nftables.TableFamilyIPv4]
-	if ok {
-		for _, rule := range ret.Rule {
-			rule.ServeDNS(ctx, w, r)
+	if r == nil {
+		return 1, fmt.Errorf("no answer received")
+	}
+
+	if r.Answer == nil {
+		log.Debug("Request didn't contain any answer")
+		return 0, nil
+	}
+
+	for _, answer := range r.Answer {
+		var tableFamilies []nftables.TableFamily
+		if answer.Header().Rrtype == dns.TypeA {
+			recordCount.WithLabelValues(metrics.WithServer(ctx)).Inc()
+			defer exportRecordDuration(ctx, time.Now())
+
+			tableFamilies = []nftables.TableFamily{nftables.TableFamilyIPv4, nftables.TableFamilyINet, nftables.TableFamilyBridge}
+		} else if answer.Header().Rrtype == dns.TypeAAAA {
+			recordCount.WithLabelValues(metrics.WithServer(ctx)).Inc()
+			defer exportRecordDuration(ctx, time.Now())
+
+			tableFamilies = []nftables.TableFamily{nftables.TableFamilyIPv6, nftables.TableFamilyINet, nftables.TableFamilyBridge}
+		}
+
+		for _, family := range tableFamilies {
+			ruleSet, ok := m.Rules[family]
+			if ok {
+				for _, rule := range ruleSet.RuleAddElement {
+					rule.ServeDNS(ctx, w, r, family)
+				}
+			}
 		}
 	}
 
@@ -48,4 +80,9 @@ func (m *NftablesHandler) MutableRuleSet(family nftables.TableFamily) *NftablesR
 		m.Rules[family] = ret
 		return ret
 	}
+}
+
+func exportRecordDuration(ctx context.Context, start time.Time) {
+	recordDuration.WithLabelValues(metrics.WithServer(ctx)).
+		Observe(float64(time.Since(start).Microseconds()))
 }
