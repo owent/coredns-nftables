@@ -24,7 +24,7 @@ nftables:github.com/owent/coredns-nftables
 
 ```corefile
 nftables [ip/ip6/inet/bridge]... {
-  set add element <TABLE_NAME> <SET_NAME> [interval] [timeout]
+  set add element <TABLE_NAME> <SET_NAME> [ip/ip6/inet] [interval] [timeout]
 }
 ```
 
@@ -40,7 +40,7 @@ example.org {
     forward . 8.8.8.8
     finalize
     nftables ip ip6 inet bridge {
-      set add element TABLE_NAME IPSET false 24h
+      set add element TABLE_NAME IPSET inet false 24h
     }
 }
 ```

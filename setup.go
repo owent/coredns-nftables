@@ -75,10 +75,26 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 				setRuleSetName := args[3]
 				var setRuleIsInterval bool = false
 				var setRuleTimeout time.Duration = 0 // time.ParseDuration()
+				var keyType nftables.SetDatatype = nftables.TypeInetService
 				if setRuleAction != "add" || setRuleTarget != "element" {
 					return c.ArgErr()
 				}
 				var nextArgIndex int = 4
+
+				if len(args) > nextArgIndex {
+					tryKeyType := strings.ToLower(args[nextArgIndex])
+					if tryKeyType == "ip" {
+						keyType = nftables.TypeIPAddr
+						nextArgIndex += 1
+					} else if tryKeyType == "ip6" {
+						keyType = nftables.TypeIP6Addr
+						nextArgIndex += 1
+					} else if tryKeyType == "inet" {
+						keyType = nftables.TypeInetService
+						nextArgIndex += 1
+					}
+				}
+
 				if len(args) > nextArgIndex {
 					tryInterval := strings.ToLower(args[nextArgIndex])
 					if parseBool, err := strconv.ParseBool(tryInterval); err == nil {
@@ -98,7 +114,7 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 					log.Warningf("Ignore invalid setting %s", args[i])
 				}
 
-				rule := NftablesSetAddElement{TableName: setRuleTableName, SetName: setRuleSetName, Interval: setRuleIsInterval, Timeout: setRuleTimeout}
+				rule := NftablesSetAddElement{TableName: setRuleTableName, SetName: setRuleSetName, Interval: setRuleIsInterval, Timeout: setRuleTimeout, KeyType: keyType}
 
 				for _, family := range families {
 					ruleSet := handle.MutableRuleSet(family)

@@ -7,6 +7,8 @@ require (
 	github.com/coredns/coredns v1.9.3
 	github.com/google/nftables v0.0.0-20220611213346-a346d51f53b3
 	github.com/miekg/dns v1.1.50
+	github.com/prometheus/client_golang v1.12.2
+	github.com/vishvananda/netns v0.0.0-20180720170159-13995c7128cc
 )
 
 require (
@@ -23,7 +25,6 @@ require (
 	github.com/mdlayher/netlink v1.4.2 // indirect
 	github.com/mdlayher/socket v0.0.0-20211102153432-57e3fa563ecb // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
-	github.com/prometheus/client_golang v1.12.2 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.34.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
