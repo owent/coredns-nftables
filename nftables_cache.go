@@ -20,9 +20,11 @@ func (cache *NftablesCache) MutableNftablesTable(cc *nftables.Conn, family nftab
 	}
 
 	if len(*tableSet) == 0 {
+		familName := (*cache).GetFamilyName(family)
 		tables, _ := cc.ListTablesOfFamily(family)
 		if tables != nil {
 			for _, table := range tables {
+				log.Debugf("Nftable table %v %v found", familName, tableName)
 				(*tableSet)[(*table).Name] = table
 			}
 		}
@@ -34,6 +36,7 @@ func (cache *NftablesCache) MutableNftablesTable(cc *nftables.Conn, family nftab
 			Family: family,
 			Name:   tableName,
 		}
+		log.Debugf("Nftable try to create table %v %v", (*cache).GetFamilyName(family), tableName)
 		table = cc.AddTable(table)
 	}
 

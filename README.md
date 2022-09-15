@@ -40,7 +40,7 @@ example.org {
     forward . 8.8.8.8
     finalize
     nftables ip ip6 inet bridge {
-      set add element TABLE_NAME IPSET inet false 24h
+      set add element filter IPSET inet false 24h
     }
 }
 ```

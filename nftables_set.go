@@ -38,7 +38,7 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 	if set == nil {
 		// Create nftable set if KeyType is not nftables.TypeInvalid
 		if m.KeyType == nftables.TypeInvalid {
-			log.Debug("Nftable set %v %v %v not found and %s is ignored", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
+			log.Debugf("Nftable set %v %v %v not found and %s is ignored", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
 			return nil
 		}
 		portSet := &nftables.Set{
@@ -50,11 +50,11 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 			Timeout:    m.Timeout,
 		}
 
-		log.Debug("Nftable create set %v %v %v and add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
+		log.Debugf("Nftable create set %v %v %v and add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
 		return cc.AddSet(portSet, elements)
 	}
 
 	// Insert into set
-	log.Debug("Nftable set %v %v %v add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
+	log.Debugf("Nftable set %v %v %v add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
 	return cc.SetAddElements(set, elements)
 }
