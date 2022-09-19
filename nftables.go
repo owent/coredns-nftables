@@ -3,14 +3,12 @@ package coredns_nftables
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/metrics"
 	"github.com/coredns/coredns/plugin/pkg/nonwriter"
 	"github.com/miekg/dns"
-	"github.com/vishvananda/netns"
 
 	"github.com/google/nftables"
 )
@@ -26,28 +24,14 @@ type NftablesHandler struct {
 	Rules map[nftables.TableFamily]*NftablesRuleSet
 }
 
-func (m *NftablesHandler) Name() string { return "nftables" }
-
-func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
-	nw := nonwriter.New(w)
-	rcode, err := plugin.NextOrFailure(m.Name(), m.Next, ctx, nw, r)
-	if err != nil {
-		return rcode, err
+func NewNftablesHandler() NftablesHandler {
+	return NftablesHandler{
+		Next:  nil,
+		Rules: make(map[nftables.TableFamily]*NftablesRuleSet),
 	}
+}
 
-	r = nw.Msg
-	if r == nil {
-		return 1, fmt.Errorf("no answer received")
-	}
-
-	err = w.WriteMsg(r)
-	if err != nil {
-		return 1, err
-	}
-
-	if r.Answer == nil {
-		log.Debug("Request didn't contain any answer")
-	}
+func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 	var hasValidRecord bool = false
 	for _, answer := range r.Answer {
 		if answer.Header().Rrtype == dns.TypeA || answer.Header().Rrtype == dns.TypeAAAA {
@@ -57,18 +41,16 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 	}
 	if !hasValidRecord {
 		log.Debug("Request didn't contain any A/AAAA record")
-		return 0, nil
+		return nil
 	}
 
-	// Create a new network namespace to test these operations,
-	// and tear down the namespace at test completion.
-	c, newNS := openSystemNFTConn()
-	defer cleanupSystemNFTConn(newNS)
-	// Clear all rules at the beginning + end of the test.
-	c.FlushRuleset()
-	defer c.FlushRuleset()
+	cache, err := NewCache()
+	if err != nil {
+		log.Errorf("NewCache failed, %v", err)
+		return err
+	}
+	defer CloseCache(cache)
 
-	cache := NftablesCache{}
 	for _, answer := range r.Answer {
 		var tableFamilies []nftables.TableFamily
 		switch answer.Header().Rrtype {
@@ -94,7 +76,7 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 			ruleSet, ok := m.Rules[family]
 			if ok {
 				for _, rule := range ruleSet.RuleAddElement {
-					err := rule.ServeDNS(ctx, &cache, &answer, c, family)
+					err := rule.ServeDNS(ctx, cache, &answer, cache.NftableConnection, family)
 					if err != nil {
 						switch answer.Header().Rrtype {
 						case dns.TypeA:
@@ -110,6 +92,34 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		}
 	}
 
+	return nil
+}
+
+func (m *NftablesHandler) Name() string { return "nftables" }
+
+func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+	nw := nonwriter.New(w)
+	rcode, err := plugin.NextOrFailure(m.Name(), m.Next, ctx, nw, r)
+	if err != nil {
+		return rcode, err
+	}
+
+	r = nw.Msg
+	if r == nil {
+		return 1, fmt.Errorf("no answer received")
+	}
+
+	err = w.WriteMsg(r)
+	if err != nil {
+		return 1, err
+	}
+
+	if r.Answer == nil {
+		log.Debug("Request didn't contain any answer")
+		return 0, nil
+	}
+
+	go m.ServeWorker(context.Background(), r)
 	return 0, nil
 }
 
@@ -127,33 +137,4 @@ func (m *NftablesHandler) MutableRuleSet(family nftables.TableFamily) *NftablesR
 func exportRecordDuration(ctx context.Context, start time.Time) {
 	recordDuration.WithLabelValues(metrics.WithServer(ctx)).
 		Observe(float64(time.Since(start).Microseconds()))
-}
-
-// openSystemNFTConn returns a netlink connection that tests against
-// the running kernel in a separate network namespace.
-// cleanupSystemNFTConn() must be called from a defer to cleanup
-// created network namespace.
-func openSystemNFTConn() (*nftables.Conn, netns.NsHandle) {
-	// We lock the goroutine into the current thread, as namespace operations
-	// such as those invoked by `netns.New()` are thread-local. This is undone
-	// in cleanupSystemNFTConn().
-	runtime.LockOSThread()
-
-	ns, err := netns.New()
-	if err != nil {
-		log.Fatalf("netns.New() failed: %v", err)
-	}
-	c, err := nftables.New(nftables.WithNetNSFd(int(ns)))
-	if err != nil {
-		log.Fatalf("nftables.New() failed: %v", err)
-	}
-	return c, ns
-}
-
-func cleanupSystemNFTConn(newNS netns.NsHandle) {
-	defer runtime.UnlockOSThread()
-
-	if err := newNS.Close(); err != nil {
-		log.Fatalf("newNS.Close() failed: %v", err)
-	}
 }

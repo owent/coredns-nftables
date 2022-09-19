@@ -39,13 +39,13 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		// Create nftable set if KeyType is not nftables.TypeInvalid
 		var keyType = m.KeyType
 		if keyType == nftables.TypeInvalid {
-			log.Debugf("Nftable set %v %v %v not found and %s is ignored", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
 			if family == nftables.TableFamilyIPv4 {
 				keyType = nftables.TypeIPAddr
 			} else if family == nftables.TableFamilyIPv6 {
 				keyType = nftables.TypeIP6Addr
 			} else {
-				keyType = nftables.TypeInetService
+				log.Debugf("Nftable set %v %v %v ignore element %s because set not found", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
+				return nil
 			}
 		}
 
@@ -68,7 +68,16 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		}
 
 		log.Debugf("Nftable create set %v %v %v and add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
-		return cc.AddSet(portSet, elements)
+		err := cc.AddSet(portSet, elements)
+		if err != nil {
+			log.Errorf("Nftable create set %v %v %v and add element %s but AddSet failed. %v", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text, err)
+			return err
+		}
+		err = cc.Flush()
+		if err != nil {
+			log.Errorf("Nftable create set %v %v %v and add element %s but Flush failed. %v", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text, err)
+		}
+		return err
 	}
 
 	// Ignore unmatched set

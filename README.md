@@ -12,7 +12,7 @@ nftables plugin of coredns
 nftables:github.com/owent/coredns-nftables
 ```
 
-This plugin should be add before [cache][1] and [finalize](https://coredns.io/explugins/finalize/) should be added after [cache][1].
+This plugin should be add after [cache][1] and before [finalize](https://coredns.io/explugins/finalize/).
 
 ```bash
 sed -i.bak -r '/finalize:.*/d' plugin.cfg
@@ -30,11 +30,16 @@ go generate
 
 ```corefile
 nftables [ip/ip6/inet/bridge]... {
-  set add element <TABLE_NAME> <SET_NAME> [ip/ip6/inet/auto] [interval] [timeout]
+  set add element <TABLE_NAME> <SET_NAME> [ip/ip6/auto] [interval] [timeout]
+  [connection timeout <timeout>]
 }
 ```
 
+The `timeout` should be greater than [cache][1].
+
 Valid timeout units are "ms", "s", "m", "h".
+
+If more than one `connection timeout <timeout>` are set, we use the last one.
 
 ## Examples
 
@@ -45,8 +50,14 @@ example.org {
     whoami
     forward . 8.8.8.8
     finalize
-    nftables ip ip6 inet bridge {
-      set add element filter IPSET inet false 24h
+    nftables ip ip6 {
+      set add element filter IPSET auto false 24h
+      connection timeout 10m
+    }
+
+    nftables inet bridge {
+      set add element filter IPV4 ip false 24h
+      set add element filter IPV6 ip6 false 24h
     }
 }
 ```
@@ -61,10 +72,13 @@ example.org {
 git clone --depth 1 https://github.com/coredns/coredns.git coredns
 cd coredns
 git reset --hard
-echo "finalize:github.com/tmeckel/coredns-finalizer" >> plugin.cfg
-echo "nftables:github.com/owent/coredns-nftables" >> plugin.cfg
+sed -i.bak -r '/finalize:.*/d' plugin.cfg
+sed -i.bak '/cache:.*/a finalize:github.com/tmeckel/coredns-finalizer' plugin.cfg
 go get github.com/tmeckel/coredns-finalizer
-go get -u github.com/owent/coredns-nftables
+sed -i.bak -r '/nftables:.*/d' plugin.cfg
+sed -i.bak '/cache:.*/a nftables:github.com/owent/coredns-nftables' plugin.cfg
+go get -u github.com/owent/coredns-nftables@main
+# go get github.com/owent/coredns-nftables@latest
 go generate
 
 env CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -gcflags=all="-N -l" -o build/linux/amd64/coredns
@@ -89,8 +103,13 @@ env CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -gcflags=all="-N -l" -o build
 
 owent.net www.owent.net {
   finalize
-  nftables ip ip6 bridge {
+  nftables ip ip6 {
     set add element test_coredns_nft TEST_SET auto false 24h
+    connection timeout 10m
+  }
+  nftables bridge {
+    set add element test_coredns_nft TEST_SET_IPV4 ip false 24h
+    set add element test_coredns_nft TEST_SET_IPV6 ip6 false 24h
   }
   import default_dns_ip
 }
