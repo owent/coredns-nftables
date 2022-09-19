@@ -40,9 +40,13 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		return 1, fmt.Errorf("no answer received")
 	}
 
+	err = w.WriteMsg(r)
+	if err != nil {
+		return 1, err
+	}
+
 	if r.Answer == nil {
 		log.Debug("Request didn't contain any answer")
-		return 0, nil
 	}
 	var hasValidRecord bool = false
 	for _, answer := range r.Answer {
