@@ -37,14 +37,31 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 	set, _ := cc.GetSetByName(table, m.SetName)
 	if set == nil {
 		// Create nftable set if KeyType is not nftables.TypeInvalid
-		if m.KeyType == nftables.TypeInvalid {
+		var keyType = m.KeyType
+		if keyType == nftables.TypeInvalid {
 			log.Debugf("Nftable set %v %v %v not found and %s is ignored", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
+			if family == nftables.TableFamilyIPv4 {
+				keyType = nftables.TypeIPAddr
+			} else if family == nftables.TableFamilyIPv6 {
+				keyType = nftables.TypeIP6Addr
+			} else {
+				keyType = nftables.TypeInetService
+			}
+		}
+
+		// Ignore unmatched set
+		if (*answer).Header().Rrtype == dns.TypeA && keyType == nftables.TypeIP6Addr {
+			log.Debugf("Nftable set %v %v %v ignore element %s because it's a ipv6 set", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
+			return nil
+		} else if (*answer).Header().Rrtype == dns.TypeAAAA && keyType == nftables.TypeIPAddr {
+			log.Debugf("Nftable set %v %v %v ignore element %s because it's a ipv4 set", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
 			return nil
 		}
+
 		portSet := &nftables.Set{
 			Table:      table,
 			Name:       m.SetName,
-			KeyType:    m.KeyType,
+			KeyType:    keyType,
 			Interval:   m.Interval,
 			HasTimeout: m.Timeout.Microseconds() > 0,
 			Timeout:    m.Timeout,
@@ -54,7 +71,14 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		return cc.AddSet(portSet, elements)
 	}
 
-	// Insert into set
+	// Ignore unmatched set
+	if (*answer).Header().Rrtype == dns.TypeA && set.KeyType == nftables.TypeIP6Addr {
+		log.Debugf("Nftable set %v %v %v ignore element %s because it's a ipv6 set", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
+		return nil
+	} else if (*answer).Header().Rrtype == dns.TypeAAAA && set.KeyType == nftables.TypeIPAddr {
+		log.Debugf("Nftable set %v %v %v ignore element %s because it's a ipv4 set", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
+		return nil
+	}
 	log.Debugf("Nftable set %v %v %v add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
 	return cc.SetAddElements(set, elements)
 }

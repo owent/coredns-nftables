@@ -92,6 +92,9 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 					} else if tryKeyType == "inet" {
 						keyType = nftables.TypeInetService
 						nextArgIndex += 1
+					} else if tryKeyType == "auto" {
+						keyType = nftables.TypeInvalid // Use invalid as auto
+						nextArgIndex += 1
 					}
 				}
 
