@@ -8,6 +8,7 @@ import (
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/metrics"
+	"github.com/coredns/coredns/plugin/pkg/nonwriter"
 	"github.com/miekg/dns"
 	"github.com/vishvananda/netns"
 
@@ -28,11 +29,13 @@ type NftablesHandler struct {
 func (m *NftablesHandler) Name() string { return "nftables" }
 
 func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
-	rcode, err := plugin.NextOrFailure(m.Name(), m.Next, ctx, w, r)
+	nw := nonwriter.New(w)
+	rcode, err := plugin.NextOrFailure(m.Name(), m.Next, ctx, nw, r)
 	if err != nil {
 		return rcode, err
 	}
 
+	r = nw.Msg
 	if r == nil {
 		return 1, fmt.Errorf("no answer received")
 	}

@@ -55,9 +55,9 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 				}
 			}
 		}
-		// Just like nftables,
+		// inet support boath ipv4 and ipv6
 		if len(families) == 0 {
-			families = append(families, nftables.TableFamilyIPv4)
+			families = append(families, nftables.TableFamilyINet)
 		}
 
 		// Refinements? In an extra block.
