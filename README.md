@@ -29,8 +29,13 @@ go generate
 ## Syntax
 
 ```corefile
-nftables [ip/ip6/inet/bridge]... {
+nftables [ip/ip6]... {
   set add element <TABLE_NAME> <SET_NAME> [ip/ip6/auto] [interval] [timeout]
+  [connection timeout <timeout>]
+}
+
+nftables [inet/bridge/arp/netdev]... {
+  set add element <TABLE_NAME> <SET_NAME> <ip/ip6> [interval] [timeout]
   [connection timeout <timeout>]
 }
 ```
