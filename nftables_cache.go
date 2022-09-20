@@ -60,16 +60,17 @@ func NewCache() (*NftablesCache, error) {
 
 func (cache *NftablesCache) destroy() error {
 	log.Debugf("nftables connection %p start to destroy", cache)
+
+	cleanupSystemNFTConn(cache.NetworkNamespace)
+	return nil
+}
+
+func CloseCache(cache *NftablesCache) error {
 	err := cache.NftableConnection.Flush()
 	if err != nil {
 		log.Errorf("Flush nftables connection failed %v", err)
 	}
 
-	cleanupSystemNFTConn(cache.NetworkNamespace)
-	return err
-}
-
-func CloseCache(cache *NftablesCache) error {
 	if time.Since(cache.CreateTimepoint) > cacheExpiredDuration {
 		return cache.destroy()
 	}
