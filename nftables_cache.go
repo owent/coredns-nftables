@@ -1,6 +1,7 @@
 package coredns_nftables
 
 import (
+	"container/list"
 	"sync"
 	"time"
 
@@ -11,12 +12,10 @@ import (
 
 var log = clog.NewWithPlugin("nftables")
 var cacheLock sync.Mutex = sync.Mutex{}
-var cacheHead *NftablesCache = nil
+var cacheList = list.New()
 var cacheExpiredDuration time.Duration = time.Minute * time.Duration(5)
 
 type NftablesCache struct {
-	prev              *NftablesCache
-	next              *NftablesCache
 	tables            map[nftables.TableFamily]*map[string]*nftables.Table
 	CreateTimepoint   time.Time
 	NftableConnection *nftables.Conn
@@ -24,33 +23,22 @@ type NftablesCache struct {
 }
 
 func NewCache() (*NftablesCache, error) {
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
 
-	// Destroy timeout connections
-	for cacheHead != nil {
-		if time.Since(cacheHead.CreateTimepoint) > cacheExpiredDuration {
-			cacheNext := cacheHead.next
-			if cacheNext != nil {
-				cacheNext.prev = nil
+	{
+		cacheLock.Lock()
+		defer cacheLock.Unlock()
+
+		// Destroy timeout connections
+		for cacheList.Front() != nil {
+			cacheHead := cacheList.Front().Value.(*NftablesCache)
+			cacheList.Remove(cacheList.Front())
+
+			if time.Since(cacheHead.CreateTimepoint) > cacheExpiredDuration {
+				go cacheHead.destroy()
+			} else {
+				log.Debugf("nftables connection select %p from pool", cacheHead)
+				return cacheHead, nil
 			}
-			cacheCurrent := cacheHead
-			cacheHead = cacheNext
-
-			go cacheCurrent.destroy()
-		} else {
-			cacheNext := cacheHead.next
-			cacheCurrent := cacheHead
-			cacheHead = cacheNext
-
-			if cacheNext != nil {
-				cacheNext.prev = nil
-			}
-			cacheCurrent.next = nil
-
-			log.Debugf("nftables connection select %p from pool", cacheCurrent)
-
-			return cacheCurrent, nil
 		}
 	}
 
@@ -60,8 +48,6 @@ func NewCache() (*NftablesCache, error) {
 	}
 
 	ret := &NftablesCache{
-		prev:              nil,
-		next:              nil,
 		tables:            make(map[nftables.TableFamily]*map[string]*nftables.Table),
 		CreateTimepoint:   time.Now(),
 		NftableConnection: c,
@@ -91,16 +77,7 @@ func CloseCache(cache *NftablesCache) error {
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
 
-	if cacheHead != nil {
-		tailCache := cacheHead
-		for tailCache.next != nil {
-			tailCache = tailCache.next
-		}
-		tailCache.next = cache
-		cache.prev = tailCache
-	} else {
-		cacheHead = cache
-	}
+	cacheList.PushBack(cache)
 	log.Debugf("nftables connection %p add to cache pool", cache)
 
 	return nil

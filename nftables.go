@@ -32,18 +32,6 @@ func NewNftablesHandler() NftablesHandler {
 }
 
 func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
-	var hasValidRecord bool = false
-	for _, answer := range r.Answer {
-		if answer.Header().Rrtype == dns.TypeA || answer.Header().Rrtype == dns.TypeAAAA {
-			hasValidRecord = true
-			break
-		}
-	}
-	if !hasValidRecord {
-		log.Debug("Request didn't contain any A/AAAA record")
-		return nil
-	}
-
 	cache, err := NewCache()
 	if err != nil {
 		log.Errorf("NewCache failed, %v", err)
@@ -109,17 +97,29 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		return 1, fmt.Errorf("no answer received")
 	}
 
-	err = w.WriteMsg(r)
-	if err != nil {
-		return 1, err
+	var hasValidRecord bool = false
+	for _, answer := range r.Answer {
+		if answer.Header().Rrtype == dns.TypeA || answer.Header().Rrtype == dns.TypeAAAA {
+			hasValidRecord = true
+			break
+		}
 	}
-
-	if r.Answer == nil {
-		log.Debug("Request didn't contain any answer")
+	if !hasValidRecord {
+		log.Debug("Request didn't contain any answer or A/AAAA record")
+		err = w.WriteMsg(r)
+		if err != nil {
+			return 1, err
+		}
 		return 0, nil
 	}
 
-	go m.ServeWorker(context.Background(), r)
+	copyMsg := r.Copy()
+	err = w.WriteMsg(r)
+
+	go m.ServeWorker(context.Background(), copyMsg)
+	if err != nil {
+		return 1, err
+	}
 	return 0, nil
 }
 
