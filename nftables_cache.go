@@ -16,10 +16,11 @@ var cacheList = list.New()
 var cacheExpiredDuration time.Duration = time.Minute * time.Duration(5)
 
 type NftablesCache struct {
-	tables            map[nftables.TableFamily]*map[string]*nftables.Table
-	CreateTimepoint   time.Time
-	NftableConnection *nftables.Conn
-	NetworkNamespace  netns.NsHandle
+	tables                    map[nftables.TableFamily]*map[string]*nftables.Table
+	CreateTimepoint           time.Time
+	NftableConnection         *nftables.Conn
+	NetworkNamespace          netns.NsHandle
+	HasNftableConnectionError bool
 }
 
 func NewCache() (*NftablesCache, error) {
@@ -48,10 +49,11 @@ func NewCache() (*NftablesCache, error) {
 	}
 
 	ret := &NftablesCache{
-		tables:            make(map[nftables.TableFamily]*map[string]*nftables.Table),
-		CreateTimepoint:   time.Now(),
-		NftableConnection: c,
-		NetworkNamespace:  newNS,
+		tables:                    make(map[nftables.TableFamily]*map[string]*nftables.Table),
+		CreateTimepoint:           time.Now(),
+		NftableConnection:         c,
+		NetworkNamespace:          newNS,
+		HasNftableConnectionError: false,
 	}
 
 	log.Debugf("nftables connection create %p", ret)
@@ -69,9 +71,10 @@ func CloseCache(cache *NftablesCache) error {
 	err := cache.NftableConnection.Flush()
 	if err != nil {
 		log.Errorf("Flush nftables connection failed %v", err)
+		cache.HasNftableConnectionError = true
 	}
 
-	if time.Since(cache.CreateTimepoint) > cacheExpiredDuration {
+	if cache.HasNftableConnectionError || time.Since(cache.CreateTimepoint) > cacheExpiredDuration {
 		return cache.destroy()
 	}
 
@@ -84,7 +87,7 @@ func CloseCache(cache *NftablesCache) error {
 	return nil
 }
 
-func (cache *NftablesCache) MutableNftablesTable(cc *nftables.Conn, family nftables.TableFamily, tableName string) *nftables.Table {
+func (cache *NftablesCache) MutableNftablesTable(family nftables.TableFamily, tableName string) *nftables.Table {
 	tableSet, ok := (*cache).tables[family]
 	if !ok {
 		tableSetM := make(map[string]*nftables.Table)
@@ -94,7 +97,7 @@ func (cache *NftablesCache) MutableNftablesTable(cc *nftables.Conn, family nftab
 
 	if len(*tableSet) == 0 {
 		familName := (*cache).GetFamilyName(family)
-		tables, _ := cc.ListTablesOfFamily(family)
+		tables, _ := cache.NftableConnection.ListTablesOfFamily(family)
 		if tables != nil {
 			log.Debugf("Nftable %v table(s) of %v found", len(tables), familName)
 			for _, table := range tables {
@@ -112,7 +115,7 @@ func (cache *NftablesCache) MutableNftablesTable(cc *nftables.Conn, family nftab
 		}
 		log.Debugf("Nftable try to create table %v %v", (*cache).GetFamilyName(family), tableName)
 		(*tableSet)[tableName] = table
-		table = cc.AddTable(table)
+		table = cache.NftableConnection.AddTable(table)
 	}
 
 	return table

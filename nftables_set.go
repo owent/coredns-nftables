@@ -18,7 +18,7 @@ type NftablesSetAddElement struct {
 
 func (m *NftablesSetAddElement) Name() string { return "nftables-set-add-element" }
 
-func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCache, answer *dns.RR, cc *nftables.Conn, family nftables.TableFamily) error {
+func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCache, answer *dns.RR, family nftables.TableFamily) error {
 	var elements []nftables.SetElement
 	var element_text string
 	switch (*answer).Header().Rrtype {
@@ -32,9 +32,9 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		return nil
 	}
 
-	table := cache.MutableNftablesTable(cc, family, m.TableName)
+	table := cache.MutableNftablesTable(family, m.TableName)
 	// get old set
-	set, _ := cc.GetSetByName(table, m.SetName)
+	set, _ := cache.NftableConnection.GetSetByName(table, m.SetName)
 	if set == nil {
 		// Create nftable set if KeyType is not nftables.TypeInvalid
 		var keyType = m.KeyType
@@ -68,14 +68,15 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		}
 
 		log.Debugf("Nftable create set %v %v %v and add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
-		err := cc.AddSet(portSet, elements)
+		err := cache.NftableConnection.AddSet(portSet, elements)
 		if err != nil {
 			log.Errorf("Nftable create set %v %v %v and add element %s but AddSet failed. %v", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text, err)
 			return err
 		}
-		err = cc.Flush()
+		err = cache.NftableConnection.Flush()
 		if err != nil {
 			log.Errorf("Nftable create set %v %v %v and add element %s but Flush failed. %v", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text, err)
+			cache.HasNftableConnectionError = true
 		}
 		return err
 	}
@@ -89,5 +90,5 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		return nil
 	}
 	log.Debugf("Nftable set %v %v %v add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
-	return cc.SetAddElements(set, elements)
+	return cache.NftableConnection.SetAddElements(set, elements)
 }

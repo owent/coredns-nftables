@@ -64,7 +64,7 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 			ruleSet, ok := m.Rules[family]
 			if ok {
 				for _, rule := range ruleSet.RuleAddElement {
-					err := rule.ServeDNS(ctx, cache, &answer, cache.NftableConnection, family)
+					err := rule.ServeDNS(ctx, cache, &answer, family)
 					if err != nil {
 						switch answer.Header().Rrtype {
 						case dns.TypeA:
