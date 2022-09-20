@@ -81,7 +81,7 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 					setRuleSetName := args[3]
 					var setRuleIsInterval bool = false
 					var setRuleTimeout time.Duration = 0 // time.ParseDuration()
-					var keyType nftables.SetDatatype = nftables.TypeInetService
+					var keyType nftables.SetDatatype = nftables.TypeInvalid
 					if setRuleAction != "add" || setRuleTarget != "element" {
 						return c.Errf("nftables set action %v invalid", setRuleTarget)
 					}
@@ -96,12 +96,12 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 							keyType = nftables.TypeIP6Addr
 							nextArgIndex += 1
 						} else if tryKeyType == "auto" {
-							if !allowAutoIpAddr {
-								return c.Errf("nftables set action %v address type invalid, only ip and ip6 family support auto address type", setRuleTarget)
-							}
 							keyType = nftables.TypeInvalid // Use invalid as auto
 							nextArgIndex += 1
 						}
+					}
+					if keyType == nftables.TypeInvalid && !allowAutoIpAddr {
+						return c.Errf("nftables set action %v address type invalid, only ip and ip6 family support auto address type", setRuleTarget)
 					}
 
 					if len(args) > nextArgIndex {
