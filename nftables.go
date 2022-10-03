@@ -122,7 +122,7 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		return dns.RcodeServerFailure, err
 	}
 
-	return dns.RcodeSuccess, nil
+	return rcode, nil
 }
 
 func (m *NftablesHandler) MutableRuleSet(family nftables.TableFamily) *NftablesRuleSet {
