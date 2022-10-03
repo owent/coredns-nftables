@@ -94,7 +94,7 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 
 	r = nw.Msg
 	if r == nil {
-		return 1, fmt.Errorf("no answer received")
+		return dns.RcodeFormatError, fmt.Errorf("no answer received")
 	}
 
 	var hasValidRecord bool = false
@@ -108,9 +108,10 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		log.Debug("Request didn't contain any answer or A/AAAA record")
 		err = w.WriteMsg(r)
 		if err != nil {
-			return 1, err
+			return dns.RcodeFormatError, err
 		}
-		return 0, nil
+
+		return dns.RcodeSuccess, nil
 	}
 
 	copyMsg := r.Copy()
@@ -118,9 +119,10 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 
 	go m.ServeWorker(context.Background(), copyMsg)
 	if err != nil {
-		return 1, err
+		return dns.RcodeServerFailure, err
 	}
-	return 0, nil
+
+	return dns.RcodeSuccess, nil
 }
 
 func (m *NftablesHandler) MutableRuleSet(family nftables.TableFamily) *NftablesRuleSet {
