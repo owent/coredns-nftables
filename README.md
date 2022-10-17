@@ -12,7 +12,7 @@ nftables plugin of coredns
 nftables:github.com/owent/coredns-nftables
 ```
 
-This plugin should be add after [cache][1] and before [finalize](https://coredns.io/explugins/finalize/).
+This plugin should be add before [cache][1] or between [cache][1] and [finalize](https://coredns.io/explugins/finalize/).
 
 ```bash
 sed -i.bak -r '/finalize:.*/d' plugin.cfg
@@ -32,11 +32,13 @@ go generate
 nftables [ip/ip6]... {
   set add element <TABLE_NAME> <SET_NAME> [ip/ip6/auto] [interval] [timeout]
   [connection timeout <timeout>]
+  [async <true/false>]
 }
 
 nftables [inet/bridge/arp/netdev]... {
   set add element <TABLE_NAME> <SET_NAME> <ip/ip6> [interval] [timeout]
   [connection timeout <timeout>]
+  [async <true/false>]
 }
 ```
 

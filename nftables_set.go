@@ -32,9 +32,9 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		return nil
 	}
 
-	table := cache.MutableNftablesTable(family, m.TableName)
+	tableCache := cache.MutableNftablesTable(family, m.TableName)
 	// get old set
-	set, _ := cache.NftableConnection.GetSetByName(table, m.SetName)
+	set, _ := cache.NftableConnection.GetSetByName(tableCache.table, m.SetName)
 	if set == nil {
 		// Create nftable set if KeyType is not nftables.TypeInvalid
 		var keyType = m.KeyType
@@ -59,7 +59,7 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		}
 
 		portSet := &nftables.Set{
-			Table:      table,
+			Table:      tableCache.table,
 			Name:       m.SetName,
 			KeyType:    keyType,
 			Interval:   m.Interval,
@@ -90,5 +90,5 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		return nil
 	}
 	log.Debugf("Nftable set %v %v %v add element %s", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
-	return cache.NftableConnection.SetAddElements(set, elements)
+	return cache.SetAddElements(tableCache, set, elements)
 }

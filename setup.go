@@ -24,6 +24,7 @@ func setup(c *caddy.Controller) error {
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
 		handle.Next = next
+		ClearCache()
 		return &handle
 	})
 
@@ -147,6 +148,21 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 						return c.Errf("nftables connection action %v argument %v invalid, %v", connectionAction, args[1], err)
 					}
 					SetConnectionTimeout(parseTimeout)
+				}
+
+			case "async":
+				{
+					args := c.RemainingArgs()
+					if len(args) < 1 {
+						return c.Errf("nftables set argument count invalid")
+					}
+
+					parseAsync, err := strconv.ParseBool(args[0])
+					if err != nil {
+						return c.Errf("nftables async argument %v invalid, %v", args[0], err)
+					}
+
+					SetNftableAsyncMode(parseAsync)
 				}
 
 			default:

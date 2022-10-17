@@ -13,6 +13,8 @@ import (
 	"github.com/google/nftables"
 )
 
+var asyncMode bool = true
+
 type NftablesRuleSet struct {
 	RuleAddElement []*NftablesSetAddElement
 }
@@ -41,24 +43,24 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 
 	for _, answer := range r.Answer {
 		var tableFamilies []nftables.TableFamily
+
 		switch answer.Header().Rrtype {
 		case dns.TypeA:
 			{
 				recordCount.WithLabelValues(metrics.WithServer(ctx)).Inc()
-				defer exportRecordDuration(ctx, time.Now())
 
 				tableFamilies = []nftables.TableFamily{nftables.TableFamilyIPv4, nftables.TableFamilyINet, nftables.TableFamilyBridge}
 			}
 		case dns.TypeAAAA:
 			{
 				recordCount.WithLabelValues(metrics.WithServer(ctx)).Inc()
-				defer exportRecordDuration(ctx, time.Now())
 
 				tableFamilies = []nftables.TableFamily{nftables.TableFamilyIPv6, nftables.TableFamilyINet, nftables.TableFamilyBridge}
 			}
 		default:
 			continue
 		}
+		defer exportRecordDuration(ctx, time.Now())
 
 		for _, family := range tableFamilies {
 			ruleSet, ok := m.Rules[family]
@@ -80,7 +82,7 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (m *NftablesHandler) Name() string { return "nftables" }
@@ -114,12 +116,17 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		return dns.RcodeSuccess, nil
 	}
 
-	copyMsg := r.Copy()
-	err = w.WriteMsg(r)
+	if asyncMode {
+		copyMsg := r.Copy()
+		err = w.WriteMsg(r)
 
-	go m.ServeWorker(context.Background(), copyMsg)
-	if err != nil {
-		return dns.RcodeServerFailure, err
+		go m.ServeWorker(context.Background(), copyMsg)
+		if err != nil {
+			return dns.RcodeServerFailure, err
+		}
+	} else {
+		m.ServeWorker(context.Background(), r)
+		err = w.WriteMsg(r)
 	}
 
 	return rcode, nil
@@ -139,4 +146,8 @@ func (m *NftablesHandler) MutableRuleSet(family nftables.TableFamily) *NftablesR
 func exportRecordDuration(ctx context.Context, start time.Time) {
 	recordDuration.WithLabelValues(metrics.WithServer(ctx)).
 		Observe(float64(time.Since(start).Microseconds()))
+}
+
+func SetNftableAsyncMode(mode bool) {
+	asyncMode = mode
 }
