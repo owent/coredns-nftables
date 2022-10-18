@@ -99,7 +99,7 @@ func (cache *NftablesCache) LruIgnoreIp(answer *dns.RR) bool {
 
 	value, ok := cache.recentlyIPCache.Get(ip)
 	if ok {
-		return value.(*NftableIPCache).ApplyCount >= setLruMaxCount
+		return value.(*NftableIPCache).ApplyCount >= setLruMaxRetryTimes
 	}
 
 	return false
