@@ -2,7 +2,6 @@ package coredns_nftables
 
 import (
 	"container/list"
-	"net"
 	"sync"
 	"time"
 
@@ -84,21 +83,21 @@ func (cache *NftablesCache) LruIgnoreIp(answer *dns.RR) bool {
 		return false
 	}
 
-	var ip *net.IP = nil
+	var ip string = ""
 	switch (*answer).Header().Rrtype {
 	case dns.TypeA:
-		ip = &(*answer).(*dns.A).A
+		ip = (*answer).(*dns.A).A.String()
 	case dns.TypeAAAA:
-		ip = &(*answer).(*dns.AAAA).AAAA
+		ip = (*answer).(*dns.AAAA).AAAA.String()
 	default:
 		return false
 	}
 
-	if ip == nil {
+	if len(ip) == 0 {
 		return false
 	}
 
-	value, ok := cache.recentlyIPCache.Get(*ip)
+	value, ok := cache.recentlyIPCache.Get(ip)
 	if ok {
 		return value.(*NftableIPCache).ApplyCount >= setLruMaxCount
 	}
@@ -111,25 +110,25 @@ func (cache *NftablesCache) LruUpdateIp(answer *dns.RR) {
 		return
 	}
 
-	var ip *net.IP = nil
+	var ip string = ""
 	switch (*answer).Header().Rrtype {
 	case dns.TypeA:
-		ip = &(*answer).(*dns.A).A
+		ip = (*answer).(*dns.A).A.String()
 	case dns.TypeAAAA:
-		ip = &(*answer).(*dns.AAAA).AAAA
+		ip = (*answer).(*dns.AAAA).AAAA.String()
 	default:
 		return
 	}
 
-	if ip == nil {
+	if len(ip) == 0 {
 		return
 	}
 
-	value, ok := cache.recentlyIPCache.Get(*ip)
+	value, ok := cache.recentlyIPCache.Get(ip)
 	if ok {
 		value.(*NftableIPCache).ApplyCount += 1
 	} else {
-		cache.recentlyIPCache.Add(*ip, &NftableIPCache{
+		cache.recentlyIPCache.Add(ip, &NftableIPCache{
 			ExpireTime: time.Now().Add(setLruTimeout),
 			ApplyCount: 1,
 		})
