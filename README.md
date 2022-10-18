@@ -31,12 +31,18 @@ go generate
 ```corefile
 nftables [ip/ip6]... {
   set add element <TABLE_NAME> <SET_NAME> [ip/ip6/auto] [interval] [timeout]
+  [set lru max <count>]
+  [set lru retry times <count>]
+  [set lru timeout <timeout>]
   [connection timeout <timeout>]
   [async <true/false>]
 }
 
 nftables [inet/bridge/arp/netdev]... {
   set add element <TABLE_NAME> <SET_NAME> <ip/ip6> [interval] [timeout]
+  [set lru max <count>]
+  [set lru retry times <count>]
+  [set lru timeout <timeout>]
   [connection timeout <timeout>]
   [async <true/false>]
 }
@@ -46,7 +52,7 @@ The `timeout` should be greater than [cache][1].
 
 Valid timeout units are "ms", "s", "m", "h".
 
-If more than one `connection timeout <timeout>` are set, we use the last one.
+If more than one `connection timeout <timeout>`, `async <true/false>`, `set lru *` are set, we use the last one.
 
 ## Examples
 
@@ -109,10 +115,13 @@ env CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -gcflags=all="-N -l" -o build
 }
 
 owent.net www.owent.net {
-  finalize
   nftables ip ip6 {
     set add element test_coredns_nft TEST_SET auto false 24h
-    connection timeout 10m
+    set lru max 30000
+    set lru retry times 5
+    set lru timeout 5m
+    connection timeout 20m
+    async true
   }
   nftables bridge {
     set add element test_coredns_nft TEST_SET_IPV4 ip false 24h

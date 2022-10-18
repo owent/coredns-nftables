@@ -2,11 +2,14 @@ package coredns_nftables
 
 import (
 	"container/list"
+	"net"
 	"sync"
 	"time"
 
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/google/nftables"
+	lru "github.com/hashicorp/golang-lru"
+	"github.com/miekg/dns"
 	"github.com/vishvananda/netns"
 )
 
@@ -14,14 +17,23 @@ var log = clog.NewWithPlugin("nftables")
 var cacheLock sync.Mutex = sync.Mutex{}
 var cacheList = list.New()
 var cacheExpiredDuration time.Duration = time.Minute * time.Duration(5)
+var setLruMaxRetryTimes int = 2147483647
+var setLruMaxCount int = 10000
+var setLruTimeout time.Duration = time.Hour * time.Duration(720)
 
 type NftableCache struct {
 	table    *nftables.Table
 	setCache map[string]*map[string]time.Time
 }
 
+type NftableIPCache struct {
+	ExpireTime time.Time
+	ApplyCount int
+}
+
 type NftablesCache struct {
 	tables                    map[nftables.TableFamily]*map[string]*NftableCache
+	recentlyIPCache           *lru.Cache
 	CreateTimepoint           time.Time
 	NftableConnection         *nftables.Conn
 	NetworkNamespace          netns.NsHandle
@@ -29,7 +41,6 @@ type NftablesCache struct {
 }
 
 func NewCache() (*NftablesCache, error) {
-
 	{
 		cacheLock.Lock()
 		defer cacheLock.Unlock()
@@ -43,6 +54,7 @@ func NewCache() (*NftablesCache, error) {
 				go cacheHead.destroy()
 			} else {
 				log.Debugf("nftables connection select %p from pool", cacheHead)
+				cacheHead.gc()
 				return cacheHead, nil
 			}
 		}
@@ -53,8 +65,10 @@ func NewCache() (*NftablesCache, error) {
 		return nil, err
 	}
 
+	lruCache, _ := lru.New(setLruMaxCount)
 	ret := &NftablesCache{
 		tables:                    make(map[nftables.TableFamily]*map[string]*NftableCache),
+		recentlyIPCache:           lruCache,
 		CreateTimepoint:           time.Now(),
 		NftableConnection:         c,
 		NetworkNamespace:          newNS,
@@ -63,6 +77,83 @@ func NewCache() (*NftablesCache, error) {
 
 	log.Debugf("nftables connection create %p", ret)
 	return ret, nil
+}
+
+func (cache *NftablesCache) LruIgnoreIp(answer *dns.RR) bool {
+	if cache.recentlyIPCache == nil {
+		return false
+	}
+
+	var ip *net.IP = nil
+	switch (*answer).Header().Rrtype {
+	case dns.TypeA:
+		ip = &(*answer).(*dns.A).A
+	case dns.TypeAAAA:
+		ip = &(*answer).(*dns.AAAA).AAAA
+	default:
+		return false
+	}
+
+	if ip == nil {
+		return false
+	}
+
+	value, ok := cache.recentlyIPCache.Get(ip)
+	if ok {
+		return value.(*NftableIPCache).ApplyCount >= setLruMaxCount
+	}
+
+	return false
+}
+
+func (cache *NftablesCache) LruUpdateIp(answer *dns.RR) {
+	if cache.recentlyIPCache == nil {
+		return
+	}
+
+	var ip *net.IP = nil
+	switch (*answer).Header().Rrtype {
+	case dns.TypeA:
+		ip = &(*answer).(*dns.A).A
+	case dns.TypeAAAA:
+		ip = &(*answer).(*dns.AAAA).AAAA
+	default:
+		return
+	}
+
+	if ip == nil {
+		return
+	}
+
+	value, ok := cache.recentlyIPCache.Get(ip)
+	if ok {
+		value.(*NftableIPCache).ApplyCount += 1
+	} else {
+		cache.recentlyIPCache.Add(ip, &NftableIPCache{
+			ExpireTime: time.Now().Add(setLruTimeout),
+			ApplyCount: 1,
+		})
+	}
+}
+
+func (cache *NftablesCache) gc() {
+	if cache.recentlyIPCache == nil {
+		return
+	}
+
+	now := time.Now()
+	for cache.recentlyIPCache.Len() != 0 {
+		_, value, ok := cache.recentlyIPCache.GetOldest()
+		if !ok {
+			break
+		}
+
+		if value.(*NftableIPCache).ExpireTime.After(now) {
+			break
+		}
+
+		cache.recentlyIPCache.RemoveOldest()
+	}
 }
 
 func (cache *NftablesCache) destroy() error {
@@ -210,4 +301,16 @@ func cleanupSystemNFTConn(newNS netns.NsHandle) {
 
 func SetConnectionTimeout(timeout time.Duration) {
 	cacheExpiredDuration = timeout
+}
+
+func SetSetLruTimeout(timeout time.Duration) {
+	setLruTimeout = timeout
+}
+
+func SetSetLruMaxCount(count int) {
+	setLruMaxCount = count
+}
+
+func SetSetLruMaxRetryTimes(times int) {
+	setLruMaxRetryTimes = times
 }

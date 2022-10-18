@@ -42,22 +42,34 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 	defer CloseCache(cache)
 
 	for _, answer := range r.Answer {
-		var tableFamilies []nftables.TableFamily
+		var tableFamilies []nftables.TableFamily = nil
 
 		switch answer.Header().Rrtype {
 		case dns.TypeA:
 			{
-				recordCount.WithLabelValues(metrics.WithServer(ctx)).Inc()
-
-				tableFamilies = []nftables.TableFamily{nftables.TableFamilyIPv4, nftables.TableFamilyINet, nftables.TableFamilyBridge}
+				if cache.LruIgnoreIp(&answer) {
+					log.Debugf("Ignore ip element %v(%v) because lru max retry times exceeded", answer.(*dns.A).A.String(), answer.Header().Name)
+				} else {
+					recordCount.WithLabelValues(metrics.WithServer(ctx)).Inc()
+					tableFamilies = []nftables.TableFamily{nftables.TableFamilyIPv4, nftables.TableFamilyINet, nftables.TableFamilyBridge}
+				}
 			}
 		case dns.TypeAAAA:
 			{
-				recordCount.WithLabelValues(metrics.WithServer(ctx)).Inc()
-
-				tableFamilies = []nftables.TableFamily{nftables.TableFamilyIPv6, nftables.TableFamilyINet, nftables.TableFamilyBridge}
+				if cache.LruIgnoreIp(&answer) {
+					log.Debugf("Ignore ip element %v(%v) because lru max retry times exceeded", answer.(*dns.AAAA).AAAA.String(), answer.Header().Name)
+				} else {
+					recordCount.WithLabelValues(metrics.WithServer(ctx)).Inc()
+					tableFamilies = []nftables.TableFamily{nftables.TableFamilyIPv6, nftables.TableFamilyINet, nftables.TableFamilyBridge}
+				}
 			}
 		default:
+			{
+				// do nohting
+			}
+		}
+
+		if tableFamilies == nil {
 			continue
 		}
 		defer exportRecordDuration(ctx, time.Now())
@@ -76,6 +88,8 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 						default:
 							log.Errorf("Add element %v(%v) to %v %v %v failed.%v", answer.String(), answer.Header().Name, cache.GetFamilyName(family), rule.TableName, rule.SetName, err)
 						}
+					} else {
+						cache.LruUpdateIp(&answer)
 					}
 				}
 			}
