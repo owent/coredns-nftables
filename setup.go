@@ -209,7 +209,7 @@ func setupSetLruOptions(c *caddy.Controller, handle *NftablesHandler, args []str
 
 		SetSetLruMaxCount(int(parseRetryTimes))
 	} else if strings.ToLower(args[1]) == "timeout" {
-		parseTimeout, err := time.ParseDuration(args[1])
+		parseTimeout, err := time.ParseDuration(args[2])
 		if err != nil {
 			return c.Errf("nftables set lru timeout argument %v invalid, %v", args[2], err)
 		}
