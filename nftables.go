@@ -13,7 +13,7 @@ import (
 	"github.com/google/nftables"
 )
 
-var asyncMode bool = true
+var asyncMode bool = false
 
 type NftablesRuleSet struct {
 	RuleAddElement []*NftablesSetAddElement
@@ -75,11 +75,12 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 		defer exportRecordDuration(ctx, time.Now())
 
 		hasError := false
+		applyCounter := 0
 		for _, family := range tableFamilies {
 			ruleSet, ok := m.Rules[family]
 			if ok {
 				for _, rule := range ruleSet.RuleAddElement {
-					err := rule.ServeDNS(ctx, cache, &answer, family)
+					err, ignored := rule.ServeDNS(ctx, cache, &answer, family)
 					if err != nil {
 						hasError = true
 						switch answer.Header().Rrtype {
@@ -90,13 +91,15 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 						default:
 							log.Errorf("Add element %v(%v) to %v %v %v failed.%v", answer.String(), answer.Header().Name, cache.GetFamilyName(family), rule.TableName, rule.SetName, err)
 						}
+					} else if !ignored {
+						applyCounter += 1
 					}
 				}
 			}
 		}
 
 		if !hasError {
-			cache.LruUpdateIp(&answer)
+			cache.LruUpdateIp(&answer, applyCounter)
 		}
 	}
 

@@ -52,7 +52,7 @@ func NewCache() (*NftablesCache, error) {
 			if time.Since(cacheHead.CreateTimepoint) > cacheExpiredDuration {
 				go cacheHead.destroy()
 			} else {
-				log.Debugf("nftables connection select %p from pool", cacheHead)
+				log.Debugf("Nftables connection select %p from pool", cacheHead)
 				cacheHead.gc()
 				return cacheHead, nil
 			}
@@ -74,7 +74,7 @@ func NewCache() (*NftablesCache, error) {
 		HasNftableConnectionError: false,
 	}
 
-	log.Debugf("nftables connection create %p", ret)
+	log.Infof("Nftables create new cache pool %p", ret)
 	return ret, nil
 }
 
@@ -105,7 +105,7 @@ func (cache *NftablesCache) LruIgnoreIp(answer *dns.RR) bool {
 	return false
 }
 
-func (cache *NftablesCache) LruUpdateIp(answer *dns.RR) {
+func (cache *NftablesCache) LruUpdateIp(answer *dns.RR, rulesCounter int) {
 	if cache.recentlyIPCache == nil {
 		return
 	}
@@ -124,6 +124,7 @@ func (cache *NftablesCache) LruUpdateIp(answer *dns.RR) {
 		return
 	}
 
+	log.Infof("Nftables apply %v rule(s) for %v(%v) done", rulesCounter, ip, (*answer).Header().Name)
 	value, ok := cache.recentlyIPCache.Get(ip)
 	if ok {
 		value.(*NftableIPCache).ApplyCount += 1
@@ -156,7 +157,7 @@ func (cache *NftablesCache) gc() {
 }
 
 func (cache *NftablesCache) destroy() error {
-	log.Debugf("nftables connection %p start to destroy", cache)
+	log.Infof("Nftables cache pool %p start to destroy", cache)
 
 	cleanupSystemNFTConn(cache.NetworkNamespace)
 	return nil
@@ -165,7 +166,7 @@ func (cache *NftablesCache) destroy() error {
 func CloseCache(cache *NftablesCache) error {
 	err := cache.NftableConnection.Flush()
 	if err != nil {
-		log.Errorf("Flush nftables connection failed %v", err)
+		log.Errorf("Nftables Flush connection failed %v", err)
 		cache.HasNftableConnectionError = true
 	}
 
@@ -177,7 +178,7 @@ func CloseCache(cache *NftablesCache) error {
 	defer cacheLock.Unlock()
 
 	cacheList.PushBack(cache)
-	log.Debugf("nftables connection %p add to cache pool", cache)
+	log.Debugf("Nftables connection %p add to cache pool", cache)
 
 	return nil
 }
@@ -207,7 +208,7 @@ func (cache *NftablesCache) MutableNftablesTable(family nftables.TableFamily, ta
 		familName := (*cache).GetFamilyName(family)
 		tables, _ := cache.NftableConnection.ListTablesOfFamily(family)
 		if tables != nil {
-			log.Debugf("Nftable %v table(s) of %v found", len(tables), familName)
+			log.Debugf("Nftables %v table(s) of %v found", len(tables), familName)
 			for _, table := range tables {
 				log.Debugf("\t - %v", table.Name)
 				(*tableSet)[(*table).Name] = &NftableCache{
@@ -225,7 +226,7 @@ func (cache *NftablesCache) MutableNftablesTable(family nftables.TableFamily, ta
 				Name:   tableName,
 			},
 		}
-		log.Debugf("Nftable try to create table %v %v", (*cache).GetFamilyName(family), tableName)
+		log.Debugf("Nftables try to create table %v %v", (*cache).GetFamilyName(family), tableName)
 		(*tableSet)[tableName] = tableCache
 		tableCache.table = cache.NftableConnection.AddTable(tableCache.table)
 	}
@@ -281,7 +282,7 @@ func openSystemNFTConn() (*nftables.Conn, netns.NsHandle, error) {
 	// c, err := nftables.New(nftables.WithNetNSFd(int(ns)))
 	c, err := nftables.New()
 	if err != nil {
-		log.Errorf("nftables.New() failed: %v", err)
+		log.Errorf("Nftables call nftables.New() failed: %v", err)
 	}
 	// return c, ns, err
 	return c, 0, err
@@ -294,7 +295,7 @@ func cleanupSystemNFTConn(newNS netns.NsHandle) {
 		return
 	}
 	if err := newNS.Close(); err != nil {
-		log.Errorf("newNS.Close() failed: %v", err)
+		log.Errorf("Nftables call newNS.Close() failed: %v", err)
 	}
 }
 
