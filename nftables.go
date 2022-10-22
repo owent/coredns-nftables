@@ -106,7 +106,7 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) (int, err
 	return applyCounter, err
 }
 
-func (m *NftablesHandler) Serve(ctx context.Context, r *dns.Msg) error {
+func (m *NftablesHandler) Serve(ctx context.Context, r *dns.Msg, nextPluginCost time.Duration) error {
 	startTime := time.Now()
 
 	applyCounter, err := m.ServeWorker(ctx, r)
@@ -114,9 +114,9 @@ func (m *NftablesHandler) Serve(ctx context.Context, r *dns.Msg) error {
 	endTime := time.Now()
 
 	if applyCounter > 0 && len(r.Answer) > 0 {
-		log.Infof("Process %v DNS answers for %v, and cost %vus",
+		log.Infof("Process %v DNS answers for %v and cost %vus, next plugin cost %vus",
 			applyCounter, r.Answer[0].Header().Name,
-			endTime.Sub(startTime).Microseconds())
+			endTime.Sub(startTime).Microseconds(), nextPluginCost.Microseconds())
 	}
 	return err
 }
@@ -124,6 +124,7 @@ func (m *NftablesHandler) Serve(ctx context.Context, r *dns.Msg) error {
 func (m *NftablesHandler) Name() string { return "nftables" }
 
 func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+	startTime := time.Now()
 	nw := nonwriter.New(w)
 	rcode, err := plugin.NextOrFailure(m.Name(), m.Next, ctx, nw, r)
 	if err != nil {
@@ -133,6 +134,7 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 	if r == nil {
 		return dns.RcodeFormatError, fmt.Errorf("no answer received")
 	}
+	endTime := time.Now()
 
 	var hasValidRecord bool = false
 	for _, answer := range r.Answer {
@@ -155,12 +157,12 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		copyMsg := r.Copy()
 		err = w.WriteMsg(r)
 
-		go m.Serve(context.Background(), copyMsg)
+		go m.Serve(context.Background(), copyMsg, endTime.Sub(startTime))
 		if err != nil {
 			return dns.RcodeServerFailure, err
 		}
 	} else {
-		m.Serve(context.Background(), r)
+		m.Serve(context.Background(), r, endTime.Sub(startTime))
 		err = w.WriteMsg(r)
 	}
 
