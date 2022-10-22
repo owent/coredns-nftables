@@ -33,15 +33,16 @@ func NewNftablesHandler() NftablesHandler {
 	}
 }
 
-func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
+func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) (int, error) {
 	cache, err := NewCache()
 	if err != nil {
 		log.Errorf("NewCache failed, %v", err)
-		return err
+		return 0, err
 	}
 	defer CloseCache(cache)
 	defer exportRecordDuration(ctx, time.Now())
 
+	applyCounter := 0
 	for _, answer := range r.Answer {
 		var tableFamilies []nftables.TableFamily = nil
 
@@ -75,7 +76,6 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 		}
 
 		hasError := false
-		applyCounter := 0
 		for _, family := range tableFamilies {
 			ruleSet, ok := m.Rules[family]
 			if ok {
@@ -103,20 +103,32 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 		}
 	}
 
+	return applyCounter, err
+}
+
+func (m *NftablesHandler) Serve(ctx context.Context, r *dns.Msg) error {
+	startTime := time.Now()
+
+	applyCounter, err := m.ServeWorker(ctx, r)
+
+	endTime := time.Now()
+
+	if applyCounter > 0 && len(r.Answer) > 0 {
+		log.Infof("Process %v DNS answers for %v, and cost %vus",
+			applyCounter, r.Answer[0].Header().Name,
+			endTime.Sub(startTime).Microseconds())
+	}
 	return err
 }
 
 func (m *NftablesHandler) Name() string { return "nftables" }
 
 func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
-	startTime := time.Now()
 	nw := nonwriter.New(w)
 	rcode, err := plugin.NextOrFailure(m.Name(), m.Next, ctx, nw, r)
 	if err != nil {
 		return rcode, err
 	}
-	nextPluginTime := time.Now()
-
 	r = nw.Msg
 	if r == nil {
 		return dns.RcodeFormatError, fmt.Errorf("no answer received")
@@ -143,18 +155,14 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		copyMsg := r.Copy()
 		err = w.WriteMsg(r)
 
-		go m.ServeWorker(context.Background(), copyMsg)
+		go m.Serve(context.Background(), copyMsg)
 		if err != nil {
 			return dns.RcodeServerFailure, err
 		}
 	} else {
-		m.ServeWorker(context.Background(), r)
+		m.Serve(context.Background(), r)
 		err = w.WriteMsg(r)
 	}
-
-	endTime := time.Now()
-	log.Infof("Process %v DNS answers for %v, next plugin cost %vus self cost %vus",
-		nextPluginTime.Sub(startTime).Microseconds(), endTime.Sub(nextPluginTime).Microseconds())
 
 	return rcode, nil
 }
