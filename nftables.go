@@ -40,6 +40,7 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 		return err
 	}
 	defer CloseCache(cache)
+	defer exportRecordDuration(ctx, time.Now())
 
 	for _, answer := range r.Answer {
 		var tableFamilies []nftables.TableFamily = nil
@@ -72,7 +73,6 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 		if tableFamilies == nil {
 			continue
 		}
-		defer exportRecordDuration(ctx, time.Now())
 
 		hasError := false
 		applyCounter := 0
@@ -109,11 +109,13 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) error {
 func (m *NftablesHandler) Name() string { return "nftables" }
 
 func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+	startTime := time.Now()
 	nw := nonwriter.New(w)
 	rcode, err := plugin.NextOrFailure(m.Name(), m.Next, ctx, nw, r)
 	if err != nil {
 		return rcode, err
 	}
+	nextPluginTime := time.Now()
 
 	r = nw.Msg
 	if r == nil {
@@ -149,6 +151,10 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		m.ServeWorker(context.Background(), r)
 		err = w.WriteMsg(r)
 	}
+
+	endTime := time.Now()
+	log.Infof("Process %v DNS answers for %v, next plugin cost %vus self cost %vus",
+		nextPluginTime.Sub(startTime).Microseconds(), endTime.Sub(nextPluginTime).Microseconds())
 
 	return rcode, nil
 }
