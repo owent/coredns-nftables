@@ -50,7 +50,11 @@ func NewCache() (*NftablesCache, error) {
 			cacheList.Remove(cacheList.Front())
 
 			if time.Since(cacheHead.CreateTimepoint) > cacheExpiredDuration {
-				go cacheHead.destroy()
+				go func(c *NftablesCache) {
+					if err := c.destroy(); err != nil {
+						log.Errorf("Destroy nftables cache %p failed, %v", c, err)
+					}
+				}(cacheHead)
 			} else {
 				log.Debugf("Nftables connection select %p from pool", cacheHead)
 				cacheHead.gc()
@@ -83,7 +87,7 @@ func (cache *NftablesCache) LruIgnoreIp(answer *dns.RR) bool {
 		return false
 	}
 
-	var ip string = ""
+	var ip string
 	switch (*answer).Header().Rrtype {
 	case dns.TypeA:
 		ip = (*answer).(*dns.A).A.String()
@@ -110,7 +114,7 @@ func (cache *NftablesCache) LruUpdateIp(answer *dns.RR, rulesCounter int) {
 		return
 	}
 
-	var ip string = ""
+	var ip string
 	switch (*answer).Header().Rrtype {
 	case dns.TypeA:
 		ip = (*answer).(*dns.A).A.String()
@@ -192,7 +196,11 @@ func ClearCache() {
 		cacheHead := cacheList.Front().Value.(*NftablesCache)
 		cacheList.Remove(cacheList.Front())
 
-		go cacheHead.destroy()
+		go func(c *NftablesCache) {
+			if err := c.destroy(); err != nil {
+				log.Errorf("Destroy nftables cache %p failed, %v", c, err)
+			}
+		}(cacheHead)
 	}
 }
 

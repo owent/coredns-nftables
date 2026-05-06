@@ -58,6 +58,8 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 				case "netdev":
 					families = append(families, nftables.TableFamilyNetdev)
 					allowAutoIpAddr = false
+				default:
+					return c.Errf("nftables family %v invalid", family)
 				}
 			}
 		}
@@ -76,7 +78,7 @@ func parse(c *caddy.Controller, handle *NftablesHandler) error {
 					if len(args) < 1 {
 						return c.Errf("nftables set argument count invalid")
 					}
-					var err error = nil
+					var err error
 					if strings.ToLower(args[0]) == "add" {
 						err = setupSetAddElement(c, handle, allowAutoIpAddr, families, args)
 					} else if strings.ToLower(args[0]) == "lru" {

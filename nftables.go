@@ -39,12 +39,16 @@ func (m *NftablesHandler) ServeWorker(ctx context.Context, r *dns.Msg) (int, err
 		log.Errorf("NewCache failed, %v", err)
 		return 0, err
 	}
-	defer CloseCache(cache)
+	defer func() {
+		if closeErr := CloseCache(cache); closeErr != nil {
+			log.Errorf("CloseCache failed, %v", closeErr)
+		}
+	}()
 	defer exportRecordDuration(ctx, time.Now())
 
 	applyCounter := 0
 	for _, answer := range r.Answer {
-		var tableFamilies []nftables.TableFamily = nil
+		var tableFamilies []nftables.TableFamily
 
 		switch answer.Header().Rrtype {
 		case dns.TypeA:
@@ -136,7 +140,7 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 	}
 	endTime := time.Now()
 
-	var hasValidRecord bool = false
+	hasValidRecord := false
 	for _, answer := range r.Answer {
 		if answer.Header().Rrtype == dns.TypeA || answer.Header().Rrtype == dns.TypeAAAA {
 			hasValidRecord = true
@@ -157,13 +161,21 @@ func (m *NftablesHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r 
 		copyMsg := r.Copy()
 		err = w.WriteMsg(r)
 
-		go m.Serve(context.Background(), copyMsg, endTime.Sub(startTime))
+		go func() {
+			if serveErr := m.Serve(context.Background(), copyMsg, endTime.Sub(startTime)); serveErr != nil {
+				log.Errorf("Async Serve failed, %v", serveErr)
+			}
+		}()
 		if err != nil {
 			return dns.RcodeServerFailure, err
 		}
 	} else {
-		m.Serve(context.Background(), r, endTime.Sub(startTime))
-		err = w.WriteMsg(r)
+		if serveErr := m.Serve(context.Background(), r, endTime.Sub(startTime)); serveErr != nil {
+			log.Errorf("Serve failed, %v", serveErr)
+		}
+		if writeErr := w.WriteMsg(r); writeErr != nil {
+			return dns.RcodeServerFailure, writeErr
+		}
 	}
 
 	return rcode, nil
