@@ -144,23 +144,24 @@ func setupSetAddElement(c *caddy.Controller, handle *NftablesHandler, allowAutoI
 	setRuleTarget := strings.ToLower(args[1])
 	setRuleTableName := args[2]
 	setRuleSetName := args[3]
-	var setRuleIsInterval bool = false
-	var setRuleTimeout time.Duration = 0 // time.ParseDuration()
-	var keyType nftables.SetDatatype = nftables.TypeInvalid
+	setRuleIsInterval := false
+	var setRuleTimeout time.Duration // time.ParseDuration()
+	keyType := nftables.TypeInvalid
 	if setRuleAction != "add" || setRuleTarget != "element" {
 		return c.Errf("nftables set action %v invalid", setRuleTarget)
 	}
-	var nextArgIndex int = 4
+	nextArgIndex := 4
 
 	if len(args) > nextArgIndex {
 		tryKeyType := strings.ToLower(args[nextArgIndex])
-		if tryKeyType == "ip" {
+		switch tryKeyType {
+		case "ip":
 			keyType = nftables.TypeIPAddr
 			nextArgIndex += 1
-		} else if tryKeyType == "ip6" {
+		case "ip6":
 			keyType = nftables.TypeIP6Addr
 			nextArgIndex += 1
-		} else if tryKeyType == "auto" {
+		case "auto":
 			keyType = nftables.TypeInvalid // Use invalid as auto
 			nextArgIndex += 1
 		}

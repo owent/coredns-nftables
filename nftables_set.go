@@ -39,11 +39,12 @@ func (m *NftablesSetAddElement) ServeDNS(ctx context.Context, cache *NftablesCac
 		// Create nftable set if KeyType is not nftables.TypeInvalid
 		var keyType = m.KeyType
 		if keyType == nftables.TypeInvalid {
-			if family == nftables.TableFamilyIPv4 {
+			switch family {
+			case nftables.TableFamilyIPv4:
 				keyType = nftables.TypeIPAddr
-			} else if family == nftables.TableFamilyIPv6 {
+			case nftables.TableFamilyIPv6:
 				keyType = nftables.TypeIP6Addr
-			} else {
+			default:
 				log.Debugf("Nftables set %v %v %v ignore element %s because set not found", (*cache).GetFamilyName(family), m.TableName, m.SetName, element_text)
 				return nil, true
 			}

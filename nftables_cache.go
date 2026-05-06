@@ -21,8 +21,7 @@ var setLruMaxCount int = 10000
 var setLruTimeout time.Duration = time.Hour * time.Duration(720)
 
 type NftableCache struct {
-	table    *nftables.Table
-	setCache map[string]*map[string]time.Time
+	table *nftables.Table
 }
 
 type NftableIPCache struct {
